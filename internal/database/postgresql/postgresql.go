@@ -33,7 +33,7 @@ func (r *Repo) SetupDB(cfg config.DatabaseConfig) (*sql.DB, error) {
 		return nil, err
 	}
 	connstr = fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", cfg.User, cfg.Password, cfg.DBName)
-	query := "CREATE TABLE IF NOT EXISTS Users(id SERIAL PRIMARY KEY,login text,email text,password text) "
+	query := "CREATE TABLE IF NOT EXISTS Users(id SERIAL PRIMARY KEY,login text,email text,password text,lastclick bigint DEFAULT 0) "
 	err = r.createTable(connstr, query)
 	if err != nil {
 		return nil, err
@@ -92,6 +92,25 @@ func (r *Repo) Fill(x, y, owner int, color string) error {
 	}
 	return nil
 }
+func (r *Repo) LastClick(id int) (int, error) {
+	var lastClick int // Переменная для хранения последнего клика
+
+	query := "SELECT lastclick FROM users WHERE id = $1"
+	row := r.DB.QueryRow(query, id) // Используем параметризацию запросов для предотвращения SQL-инъекций
+	err := row.Scan(&lastClick)     // Сканируем результат в переменную lastClick
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return 0, nil // Если пользователь не найден, возвращаем 0
+		}
+		return 0, err // Возвращаем ошибку, если произошла другая ошибка
+	}
+	return lastClick, nil // Возвращаем последний клик
+}
+func (r *Repo) UpdateClick(userID int, clickValue int) error {
+	query := "UPDATE users SET lastclick = $1 WHERE id = $2"
+	_, err := r.DB.Exec(query, clickValue, userID) // Выполняем запрос на обновление
+	return err                                     // Возвращаем ошибку, если произошла ошибка
+}
 func (r *Repo) GetPixels() ([]RepoPoint, error) {
 	var (
 		x     int
@@ -122,34 +141,48 @@ func (r *Repo) GetPixels() ([]RepoPoint, error) {
 }
 
 func (r *Repo) SignUp(login, email, password string) error {
-	query := fmt.Sprintf("INSERT INTO users (login,email,password) VALUES ('%s','%s','%s')", login, email, password)
-	_, err := r.DB.Exec(query)
+	var exists bool
+	err := r.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE login = $1 OR email = $2)", login, email).Scan(&exists)
 	if err != nil {
-		return err
+		return fmt.Errorf("error checking user existence: %w", err)
 	}
+
+	if exists {
+		return fmt.Errorf("user with login '%s' or email '%s' already exists", login, email)
+	}
+
+	// Insert new user if not exists
+	query := "INSERT INTO users (login, email, password) VALUES ($1, $2, $3)"
+	_, err = r.DB.Exec(query, login, email, password)
+	if err != nil {
+		return fmt.Errorf("error inserting new user: %w", err)
+	}
+
 	return nil
 }
 
-func (r *Repo) SignIn(login, password string) (int, error) {
-	query := fmt.Sprintf("SELECT id FROM users WHERE login='%s' AND password='%s'", login, password)
+func (r *Repo) SignIn(login, password string) (int, int, error) {
+	query := fmt.Sprintf("SELECT id,lastclick FROM users WHERE login = '%s' AND password = '%s'", login, password)
+
 	rows, err := r.DB.Query(query)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	defer rows.Close()
 	var id int
+	var lastclick int
 	for rows.Next() {
-		err := rows.Scan(&id)
+		err := rows.Scan(&id, &lastclick)
 		if err != nil {
-			return 0, err
+			return 0, 0, err
 		}
-		return id, nil
+		return id, lastclick, nil
 	}
-	return 0, fmt.Errorf("no student found with login=%s", login)
+	return 0, 0, fmt.Errorf("no student found with login=%s", login)
 
 }
 func (r *Repo) VerifyStudent(login, password string) error {
-	_, err := r.SignIn(login, password)
+	_, _, err := r.SignIn(login, password)
 	return err
 }
 

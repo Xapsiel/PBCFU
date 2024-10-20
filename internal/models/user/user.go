@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
-	"strconv"
 	"time"
 )
 
@@ -27,7 +26,8 @@ const (
 
 type tokenClaims struct {
 	jwt.StandardClaims
-	AuthId int `json:"AuthId"`
+	AuthId    int `json:"AuthId"`
+	LastClick int `json:"LastClick"`
 }
 
 func New(login, password, repeatPassword, email string) *User {
@@ -52,13 +52,13 @@ func makeHash(password string) string {
 	pwd.Write([]byte(salt))
 	return fmt.Sprintf("%x", pwd.Sum(nil))
 }
-func (u *User) SignIn(db *sql.DB) (string, error) {
+func (u *User) SignIn(db *sql.DB) (string, int, error) {
 	repo := postgresql.Repo{DB: db}
 
 	u.Password = makeHash(u.Password)
-	id, err := repo.SignIn(u.Login, u.Password)
+	id, lastclick, err := repo.SignIn(u.Login, u.Password)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &tokenClaims{
 		jwt.StandardClaims{
@@ -66,11 +66,24 @@ func (u *User) SignIn(db *sql.DB) (string, error) {
 			IssuedAt:  time.Now().Unix(),
 		},
 		id,
+		lastclick,
 	})
 	res, err := token.SignedString([]byte(signingKey))
-	return res, err
+	return res, id, err
 }
-func ParseToken(accessToken string) (int, error) {
+func GetLastClick(id int, db *sql.DB) (int, error) {
+	repo := postgresql.Repo{DB: db}
+	lastClick, err := repo.LastClick(id)
+	if err != nil {
+		return 0, err
+	}
+	return lastClick, nil
+}
+func UpdateLastClick(id, lastclick int, db *sql.DB) error {
+	repo := postgresql.Repo{DB: db}
+	return repo.UpdateClick(id, lastclick)
+}
+func ParseToken(accessToken string) (int, int, error) {
 	token, err := jwt.ParseWithClaims(accessToken, &tokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -78,13 +91,14 @@ func ParseToken(accessToken string) (int, error) {
 		return []byte(signingKey), nil
 	})
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	if claims, ok := token.Claims.(*tokenClaims); ok && token.Valid {
-		id, _ := strconv.Atoi(claims.Id)
-		return id, nil
+		id := claims.AuthId
+		lastclick := claims.LastClick
+		return id, lastclick, nil
 	}
-	return 0, errors.New("invalid token")
+	return 0, 0, errors.New("invalid token")
 
 }
 func (u *User) Verify() error {

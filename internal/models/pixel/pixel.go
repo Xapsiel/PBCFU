@@ -18,6 +18,7 @@ func New(X, Y int, Owner int, color string) *Pixel {
 }
 
 func (p *Pixel) Fill(db *sql.DB) error {
+
 	repo := postgresql.Repo{DB: db}
 	err := repo.Fill(p.X, p.Y, p.Owner, p.Color)
 	if err != nil {

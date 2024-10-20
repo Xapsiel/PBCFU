@@ -3,6 +3,7 @@ package rest
 import (
 	"database/sql"
 	"dewu/internal/config"
+	"dewu/internal/services/painter"
 	PixSer "dewu/internal/services/pixel"
 	"dewu/internal/services/user"
 	"fmt"
@@ -19,7 +20,12 @@ var upgrader = websocket.Upgrader{
 
 // Список клиентов вебсокета и канал для передачи пикселей
 var clients = make(map[*websocket.Conn]bool)
-var broadcast = make(chan PixSer.PixelService)
+var broadcast = make(chan pixelClick)
+
+type pixelClick struct {
+	*PixSer.PixelService
+	lastclick int
+}
 
 // Обработчик регистрации
 func SignUpHandler(c *gin.Context, db *sql.DB) {
@@ -74,14 +80,14 @@ func SignInHandler(c *gin.Context, db *sql.DB) {
 	u.Student.Login = LOGIN.Login
 
 	// Попытка входа
-	token, err := u.SignIn()
+	token, id, err := u.SignIn()
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	// Возврат результата
-	c.JSON(http.StatusOK, gin.H{"status": "success", "token": token})
+	c.JSON(http.StatusOK, gin.H{"status": "success", "token": token, "id": id})
 }
 
 func handleMessages() {
@@ -89,17 +95,132 @@ func handleMessages() {
 		pixel := <-broadcast
 
 		// Логирование данных пикселя
-		fmt.Println(pixel.Pixel.X, pixel.Pixel.Y, pixel.Pixel.Owner, pixel.Pixel.Color)
 
 		// Отправка данных пикселя всем клиентам
 		for client := range clients {
-			if err := client.WriteJSON(pixel.Pixel); err != nil {
+			if err := client.WriteJSON(pixel); err != nil {
 				log.Printf("Ошибка отправки данных клиенту: %v", err)
 				client.Close()
 				delete(clients, client)
 			}
 		}
 	}
+}
+func handleConnections(c *gin.Context, db *sql.DB) {
+	// Проверяем токен перед подключением к WebSocket
+	_, id, _, err := JWTMiddlewareWebSocket(c, db)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Println("Ошибка обновления до вебсокета:", err)
+		return
+	}
+	defer ws.Close()
+
+	// Добавляем нового клиента
+	clients[ws] = true
+	defer delete(clients, ws)
+
+	for {
+		// Структура для данных пикселя
+		var pixel struct {
+			X         int    `json:"x"`
+			Y         int    `json:"y"`
+			Color     string `json:"color"`
+			Owner     int    `json:"owner"`
+			Lastclick int    `json:"lastclick"`
+		}
+
+		// Чтение данных пикселя из вебсокета
+		if err := ws.ReadJSON(&pixel); err != nil {
+			log.Printf("Ошибка чтения JSON: %v", err)
+			break // Break the loop on read error
+		}
+		fmt.Println(pixel)
+		// Создание нового объекта пикселя и проверка пользователя
+		pixelSer := *PixSer.New(pixel.X, pixel.Y, pixel.Owner, pixel.Color, db)
+		pixelclk := pixelClick{&pixelSer, pixel.Lastclick}
+		user.UpdateLastClick(id, pixelclk.lastclick, db)
+
+		// Заполнение пикселя
+		if err := pixelSer.Fill(); err != nil {
+			log.Printf("Ошибка заполнения пикселя: %v", err)
+			continue
+		}
+
+		// Отправка пикселя в канал
+		broadcast <- pixelclk
+	}
+
+	// Удаляем клиента после выхода из цикла
+	delete(clients, ws)
+}
+
+func Print(c *gin.Context, db *sql.DB) {
+	// Определяем структуру для получения пикселей
+	var pixels struct {
+		ID   int `json:"id"`
+		Data []struct {
+			X     int    `json:"x"`
+			Y     int    `json:"y"`
+			Color string `json:"color"`
+		} `json:"data"` // Добавляем тег json
+	}
+	//var d interface{}
+	// Пробуем привязать данные из запроса к структуре pixels
+	if err := c.BindJSON(&pixels); err != nil {
+		c.String(http.StatusBadRequest, "Неверные данные запроса")
+		return
+	}
+
+	// Извлекаем ID и данные
+	id := pixels.ID
+	data := pixels.Data
+
+	// Заполняем пиксели в базе данных
+	for _, pixel := range data {
+		pixelSer := *PixSer.New(pixel.X, pixel.Y, id, pixel.Color, db)
+		if err := pixelSer.Fill(); err != nil {
+			c.String(http.StatusBadRequest, fmt.Sprintf("Ошибка заполнения пикселя: %v", err))
+			return
+		}
+	}
+
+	// Возвращаем успешный ответ
+	all := painter.New("smile.png")
+	for _, row := range all {
+		for _, pixel := range row {
+			pixelSer := *PixSer.New(pixel.X, pixel.Y, id, pixel.Color, db)
+			if err := pixelSer.Fill(); err != nil {
+				c.String(http.StatusBadRequest, fmt.Sprintf("Ошибка заполнения пикселя: %v", err))
+				return
+			}
+		}
+	}
+	c.String(http.StatusOK, "Пиксели успешно добавлены")
+
+}
+
+func getLastClickHandler(c *gin.Context, db *sql.DB) {
+	var LastClick struct {
+		Time int `json:"time"`
+		ID   int `json:"id"`
+	}
+	// Получение данных из формы
+	if err := c.Bind(&LastClick); err != nil {
+		c.String(http.StatusBadRequest, "Неверные данные запроса")
+		return
+	}
+	lastclick, err := user.GetLastClick(LastClick.ID, db)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "success", "lastclick": lastclick})
+
 }
 
 // Обработчик получения всех пикселей
@@ -128,75 +249,30 @@ func corsMiddleware(c *gin.Context) {
 }
 
 // Middleware для JWT, специфичный для WebSocket
-func JWTMiddlewareWebSocket(c *gin.Context) (string, error) {
+func JWTMiddlewareWebSocket(c *gin.Context, db *sql.DB) (string, int, int, error) {
 	token := c.Query("token") // Получаем токен из query-параметров
 	if token == "" {
-		return "", fmt.Errorf("не передан JWT токен")
+		return "", 0, 0, fmt.Errorf("не передан JWT токен")
 	}
 
 	// Здесь разбираем токен, если нужно, его декодируем или парсим
-	if _, err := user.ParseToken(token); err != nil {
-		return "", fmt.Errorf("неверный JWT токен")
+	id, lastclick, err := user.ParseToken(token)
+	if err != nil {
+		return "", 0, 0, fmt.Errorf("неверный JWT токен")
 	}
-	return token, nil
+	return token, id, lastclick, nil
 }
 
 // Обработчик соединений по WebSocket
-func handleConnections(c *gin.Context, db *sql.DB) {
-	// Проверяем токен перед подключением к WebSocket
-	_, err := JWTMiddlewareWebSocket(c)
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
-
-	ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
-	if err != nil {
-		log.Println("Ошибка обновления до вебсокета:", err)
-		return
-	}
-	defer ws.Close()
-
-	// Добавляем нового клиента
-	clients[ws] = true
-	defer delete(clients, ws)
-
-	for {
-		// Структура для данных пикселя
-		var pixel struct {
-			X     int    `json:"x"`
-			Y     int    `json:"y"`
-			Color string `json:"color"`
-			Owner int    `json:"owner"`
-		}
-
-		// Чтение данных пикселя из вебсокета
-		if err := ws.ReadJSON(&pixel); err != nil {
-			log.Printf("Ошибка чтения JSON: %v", err)
-			continue
-		}
-
-		// Создание нового объекта пикселя и проверка пользователя
-		pixelSer := *PixSer.New(pixel.X, pixel.Y, pixel.Owner, pixel.Color, db)
-
-		// Заполнение пикселя
-		if err := pixelSer.Fill(); err != nil {
-			log.Printf("Ошибка заполнения пикселя: %v", err)
-			continue
-		}
-
-		// Отправка пикселя в канал
-		broadcast <- pixelSer
-	}
-}
 
 // Запуск сервера
 func StartServer(cfg config.Config, db *sql.DB) error {
 	router := gin.Default()
-
 	// Использование CORS
 	router.Use(corsMiddleware)
-
+	router.POST("/print", func(c *gin.Context) {
+		Print(c, db)
+	})
 	// Группа маршрутов для API без JWT аутентификации
 	router.POST("/SignUp", func(c *gin.Context) {
 		SignUpHandler(c, db)
@@ -206,6 +282,10 @@ func StartServer(cfg config.Config, db *sql.DB) error {
 	})
 	router.GET("/getPixels", func(c *gin.Context) {
 		getPixelsHandler(c, db)
+	})
+
+	router.POST("/getLastClick", func(c *gin.Context) {
+		getLastClickHandler(c, db)
 	})
 	// Группа маршрутов для API с JWT аутентификацией
 	webhook := router.Group("/webhook")
