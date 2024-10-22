@@ -126,7 +126,6 @@ func handleConnections(c *gin.Context, db *sql.DB) {
 	defer delete(clients, ws)
 
 	for {
-		// Структура для данных пикселя
 		var pixel struct {
 			X         int    `json:"x"`
 			Y         int    `json:"y"`
@@ -135,29 +134,25 @@ func handleConnections(c *gin.Context, db *sql.DB) {
 			Lastclick int    `json:"lastclick"`
 		}
 
-		// Чтение данных пикселя из вебсокета
 		if err := ws.ReadJSON(&pixel); err != nil {
 			log.Printf("Ошибка чтения JSON: %v", err)
-			break // Break the loop on read error
+			break // Прерываем цикл при ошибке чтения
 		}
+
 		fmt.Println(pixel)
-		// Создание нового объекта пикселя и проверка пользователя
 		pixelSer := *PixSer.New(pixel.X, pixel.Y, pixel.Owner, pixel.Color, db)
 		pixelclk := pixelClick{&pixelSer, pixel.Lastclick}
 		user.UpdateLastClick(id, pixelclk.lastclick, db)
 
-		// Заполнение пикселя
 		if err := pixelSer.Fill(); err != nil {
 			log.Printf("Ошибка заполнения пикселя: %v", err)
 			continue
 		}
 
-		// Отправка пикселя в канал
 		broadcast <- pixelclk
 	}
 
-	// Удаляем клиента после выхода из цикла
-	delete(clients, ws)
+	delete(clients, ws) // Удаляем клиента после выхода из цикла
 }
 
 func Print(c *gin.Context, db *sql.DB) {
@@ -191,7 +186,7 @@ func Print(c *gin.Context, db *sql.DB) {
 	}
 
 	// Возвращаем успешный ответ
-	all := painter.New("smile.png")
+	all := painter.New("cat2.png")
 	for _, row := range all {
 		for _, pixel := range row {
 			pixelSer := *PixSer.New(pixel.X, pixel.Y, id, pixel.Color, db)
@@ -249,17 +244,26 @@ func corsMiddleware(c *gin.Context) {
 }
 
 // Middleware для JWT, специфичный для WebSocket
+// Middleware для JWT, специфичный для WebSocket
 func JWTMiddlewareWebSocket(c *gin.Context, db *sql.DB) (string, int, int, error) {
 	token := c.Query("token") // Получаем токен из query-параметров
 	if token == "" {
 		return "", 0, 0, fmt.Errorf("не передан JWT токен")
 	}
 
+	// Убираем "Bearer " из токена
+
 	// Здесь разбираем токен, если нужно, его декодируем или парсим
-	id, lastclick, err := user.ParseToken(token)
+	login, id, lastclick, err := user.ParseToken(token)
 	if err != nil {
 		return "", 0, 0, fmt.Errorf("неверный JWT токен")
 	}
+
+	// Проверка существования пользователя
+	if !user.Exists(id, login, db) { // Здесь предполагается, что есть функция проверки существования пользователя
+		return "", 0, 0, fmt.Errorf("пользователь не существует")
+	}
+
 	return token, id, lastclick, nil
 }
 
@@ -287,6 +291,9 @@ func StartServer(cfg config.Config, db *sql.DB) error {
 	router.POST("/getLastClick", func(c *gin.Context) {
 		getLastClickHandler(c, db)
 	})
+	router.GET("/validateToken", func(c *gin.Context) {
+		validateTokenHandler(c, db)
+	})
 	// Группа маршрутов для API с JWT аутентификацией
 	webhook := router.Group("/webhook")
 	// Маршруты для WebSocket
@@ -300,4 +307,32 @@ func StartServer(cfg config.Config, db *sql.DB) error {
 	log.Println("Сервер запущен на порту :8080")
 	return router.Run(":8080")
 
+}
+
+func validateTokenHandler(c *gin.Context, db *sql.DB) {
+	token := c.Request.Header.Get("Authorization") // Получаем токен из заголовка
+
+	// Проверяем, что токен передан
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"isValid": false})
+		return
+	}
+
+	// Убираем "Bearer " из токена
+	token = token[len("Bearer "):]
+
+	// Проверка токена
+	login, id, _, err := user.ParseToken(token)
+
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"isValid": false})
+		return
+	}
+	result := user.Exists(id, login, db)
+	if !result {
+		c.JSON(http.StatusUnauthorized, gin.H{"isValid": false})
+		return
+	}
+	// Токен действителен
+	c.JSON(http.StatusOK, gin.H{"isValid": true})
 }

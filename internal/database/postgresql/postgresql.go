@@ -186,6 +186,19 @@ func (r *Repo) VerifyStudent(login, password string) error {
 	return err
 }
 
+func (r *Repo) Exist(login string, id int) bool {
+	query := fmt.Sprintf("SELECT 1 FROM users WHERE login = '%s' AND id = '%d'", login, id)
+	row := r.DB.QueryRow(query)
+	err := row.Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false
+		}
+		return false
+	}
+	return true
+}
+
 //func (r *Repo) CardExists(name string, category string) error {
 //	query := fmt.Sprintf("SELECT id,name,price,category FROM cards WHERE name='%s' AND category='%s'", name, category)
 //	row := r.DB.QueryRow(query)

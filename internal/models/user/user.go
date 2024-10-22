@@ -26,8 +26,9 @@ const (
 
 type tokenClaims struct {
 	jwt.StandardClaims
-	AuthId    int `json:"AuthId"`
-	LastClick int `json:"LastClick"`
+	AuthId    int    `json:"AuthId"`
+	Login     string `json:"Login"`
+	LastClick int    `json:"LastClick"`
 }
 
 func New(login, password, repeatPassword, email string) *User {
@@ -66,6 +67,7 @@ func (u *User) SignIn(db *sql.DB) (string, int, error) {
 			IssuedAt:  time.Now().Unix(),
 		},
 		id,
+		u.Login,
 		lastclick,
 	})
 	res, err := token.SignedString([]byte(signingKey))
@@ -83,7 +85,7 @@ func UpdateLastClick(id, lastclick int, db *sql.DB) error {
 	repo := postgresql.Repo{DB: db}
 	return repo.UpdateClick(id, lastclick)
 }
-func ParseToken(accessToken string) (int, int, error) {
+func ParseToken(accessToken string) (string, int, int, error) {
 	token, err := jwt.ParseWithClaims(accessToken, &tokenClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -91,17 +93,23 @@ func ParseToken(accessToken string) (int, int, error) {
 		return []byte(signingKey), nil
 	})
 	if err != nil {
-		return 0, 0, err
+		return "", 0, 0, err
 	}
 	if claims, ok := token.Claims.(*tokenClaims); ok && token.Valid {
 		id := claims.AuthId
 		lastclick := claims.LastClick
-		return id, lastclick, nil
+		login := claims.Login
+		return login, id, lastclick, nil
 	}
-	return 0, 0, errors.New("invalid token")
+	return "", 0, 0, errors.New("invalid token")
 
 }
-func (u *User) Verify() error {
-	repo := postgresql.Repo{}
+func (u *User) Verify(db *sql.DB) error {
+	repo := postgresql.Repo{DB: db}
 	return repo.VerifyStudent(u.Login, u.Password)
+}
+
+func (u *User) Exist(id int, db *sql.DB) bool {
+	repo := postgresql.Repo{DB: db}
+	return repo.Exist(u.Login, id)
 }

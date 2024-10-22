@@ -39,10 +39,10 @@ func (us *UserService) SignIn() (string, int, error) {
 
 func (us *UserService) Verify() error {
 	u := user.New(us.Student.Login, us.Student.Password, us.Student.Repeatpassword, us.Student.Email)
-	return u.Verify()
+	return u.Verify(us.DB)
 }
 
-func ParseToken(accessToken string) (int, int, error) {
+func ParseToken(accessToken string) (string, int, int, error) {
 	return user.ParseToken(accessToken)
 }
 func GetLastClick(id int, db *sql.DB) (int, error) {
@@ -50,4 +50,9 @@ func GetLastClick(id int, db *sql.DB) (int, error) {
 }
 func UpdateLastClick(id, lastclick int, db *sql.DB) error {
 	return user.UpdateLastClick(id, lastclick, db)
+}
+
+func Exists(id int, login string, db *sql.DB) bool {
+	u := user.New(login, "", "", "")
+	return u.Exist(id, db)
 }
