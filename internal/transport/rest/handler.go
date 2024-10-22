@@ -95,10 +95,17 @@ func handleMessages() {
 		pixel := <-broadcast
 
 		// Логирование данных пикселя
-
+		var pixelWrite struct {
+			X     int    `json:"x"`
+			Y     int    `json:"y"`
+			Color string `json:"color"`
+		}
+		pixelWrite.X = pixel.Pixel.X
+		pixelWrite.Y = pixel.Pixel.Y
+		pixelWrite.Color = pixel.Pixel.Color
 		// Отправка данных пикселя всем клиентам
 		for client := range clients {
-			if err := client.WriteJSON(pixel); err != nil {
+			if err := client.WriteJSON(pixelWrite); err != nil {
 				log.Printf("Ошибка отправки данных клиенту: %v", err)
 				client.Close()
 				delete(clients, client)
