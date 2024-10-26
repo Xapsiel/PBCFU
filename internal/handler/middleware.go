@@ -21,6 +21,7 @@ func (h *Handler) userIdentity(c *gin.Context) {
 	if err != nil {
 		newErrorResponse(c, http.StatusUnauthorized, "Invalid Authorization header")
 	}
+	c.Set("token", headerParts[1])
 	c.Set("user", userid)
 	c.Set("login", login)
 	c.Set("lastclick", lastclick)
@@ -36,5 +37,21 @@ func corsMiddleware(c *gin.Context) {
 		return
 	}
 
+	c.Next()
+}
+func (h *Handler) isAdmin(c *gin.Context) {
+	token, ok := c.Get("token")
+	if !ok {
+		c.Set("permission", 0)
+	}
+	tokenstr := token.(string)
+	flag, err := h.service.IsAdmin(tokenstr)
+	if err != nil {
+		c.Set("permission", 0)
+	}
+	if !flag {
+		c.Set("permission", 0)
+	}
+	c.Set("permission", 1)
 	c.Next()
 }

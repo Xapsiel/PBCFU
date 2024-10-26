@@ -5,7 +5,8 @@ CREATE TABLE users
     login VARCHAR(100) NOT NULL UNIQUE,
     email VARCHAR(100) NOT NULL UNIQUE,
     password TEXT NOT NULL,
-    lastclick BIGINT DEFAULT 0
+    lastclick BIGINT DEFAULT 0,
+    permissions int default 0
 );
 
 -- Creating the pixels table

@@ -7,4 +7,5 @@ type User struct {
 	Password       string `json:"password" binding:"required"`
 	RepeatPassword string `json:"repeatpassword"`
 	LastClick      int    `json:"LastClick"`
+	Permissions    uint   `json:"permissions"`
 }

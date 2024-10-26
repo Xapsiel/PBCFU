@@ -17,7 +17,7 @@ type Pixel interface {
 type User interface {
 	CreateUser(user dewu.User) (int, error)
 	GetUser(login, password string) (dewu.User, error)
-	Exist(int, string) (bool, error)
+	Exist(int, string) (bool, uint, error)
 }
 
 type Repository struct {

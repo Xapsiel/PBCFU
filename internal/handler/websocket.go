@@ -14,6 +14,15 @@ var upgrader = websocket.Upgrader{
 
 func (h *Handler) HandleWebSocketConnection(c *gin.Context) {
 	// Обновляем соединение до WebSocket
+	token := c.Query("token")
+	var perm uint = 0
+	flag, err := h.service.Admin.IsAdmin(token)
+	if err != nil {
+		perm = 0
+	}
+	if flag {
+		perm = 1
+	}
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		newErrorResponse(c, http.StatusInternalServerError, "Failed to upgrade connection to WebSocket")
@@ -23,7 +32,6 @@ func (h *Handler) HandleWebSocketConnection(c *gin.Context) {
 
 	// Добавляем клиента в WebSocketService
 	h.service.AddClient(conn)
-
 	// Обрабатываем соединение
-	h.service.HandleConnection(conn)
+	h.service.HandleConnection(conn, perm)
 }

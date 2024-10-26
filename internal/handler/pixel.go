@@ -16,7 +16,3 @@ func (h *Handler) getPixels(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, pixels)
 }
-
-func (h *Handler) print(c *gin.Context) {
-
-}

@@ -30,7 +30,7 @@ func NewWebSocketService(repo repository.Pixel) *WebSocketService {
 }
 
 // Метод для обработки входящих сообщений WebSocket
-func (ws *WebSocketService) HandleConnection(conn *websocket.Conn) {
+func (ws *WebSocketService) HandleConnection(conn *websocket.Conn, perm uint) {
 	ws.AddClient(conn) // Добавляем клиента
 	for {
 		var pixel dewu.PixelClick
@@ -45,6 +45,9 @@ func (ws *WebSocketService) HandleConnection(conn *websocket.Conn) {
 		}
 
 		ws.pixelService.UpdatePixel(dewu.Pixel{ID: pixel.ID, X: pixel.X, Y: pixel.Y, Color: pixel.Color})
+		if perm == 1 {
+			pixel.Lastclick = 0
+		}
 		ws.pixelService.UpdateClick(pixel.ID, pixel.Lastclick)
 		// Добавляем пиксель в канал вещания
 		ws.broadcast <- pixel

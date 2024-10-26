@@ -24,11 +24,15 @@ func (h *Handler) InitRoutes() *gin.Engine {
 	api := router.Group("api", h.userIdentity)
 	{
 		api.POST("/getLastClick", h.lastClick)
-		api.POST("/print", h.print)
 	}
 	pixels := router.Group("pixels")
 	{
 		pixels.GET("/getPixels", h.getPixels)
+	}
+	admin := router.Group("admin", h.userIdentity, h.isAdmin)
+	{
+		admin.POST("/print", h.print)
+		admin.POST("/fill", h.fill)
 	}
 
 	webhook := router.Group("/webhook")

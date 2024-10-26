@@ -33,6 +33,7 @@ func (h *Handler) signIn(c *gin.Context) {
 	token, id, err := h.service.GenerateToken(input.Login, input.Password)
 	if err != nil {
 		newErrorResponse(c, http.StatusInternalServerError, err.Error())
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"token": token, "id": id})
 }
@@ -66,7 +67,7 @@ func (h *Handler) validateToken(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"isValid": false})
 	}
-	result, err := h.service.Exist(id, login)
+	result, _, err := h.service.Exist(id, login)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"isValid": false})
 	}

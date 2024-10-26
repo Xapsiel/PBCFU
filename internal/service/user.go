@@ -36,7 +36,7 @@ func (u *UserService) CreateUser(user dewu.User) (int, error) {
 	user.RepeatPassword = user.Password
 	return u.repo.CreateUser(user)
 }
-func (u *UserService) Exist(id int, login string) (bool, error) {
+func (u *UserService) Exist(id int, login string) (bool, uint, error) {
 	return u.repo.Exist(id, login)
 }
 func (u *UserService) GenerateToken(login string, password string) (string, int, error) {

@@ -30,12 +30,12 @@ func (p *UserPostgres) GetUser(login, password string) (dewu.User, error) {
 	err := p.db.Get(&user, query, login, password)
 	return user, err
 }
-func (p *UserPostgres) Exist(id int, login string) (bool, error) {
+func (p *UserPostgres) Exist(id int, login string) (bool, uint, error) {
 	var user dewu.User
 	query := fmt.Sprintf("SELECT * FROM users WHERE login = $1 AND id = $2")
 	err := p.db.Get(&user, query, login, id)
 	if err != nil {
-		return false, err
+		return false, 0, err
 	}
-	return true, nil
+	return true, user.Permissions, nil
 }

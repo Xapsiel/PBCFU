@@ -19,14 +19,17 @@ type User interface {
 	CreateUser(user dewu.User) (int, error)                           // Создание нового пользователя
 	GenerateToken(login string, password string) (string, int, error) // Генерация токена
 	ParseToken(token string) (int, string, int, error)                // Парсинг токена
-	Exist(int, string) (bool, error)
+	Exist(int, string) (bool, uint, error)
 }
 
 // Websocket - интерфейс для работы с WebSocket
 type Websocket interface {
-	AddClient(conn *websocket.Conn)        // Добавление клиента
-	HandleConnection(conn *websocket.Conn) // Обработка соединения
-	BroadcastMessage()                     // Рассылка сообщений всем клиентам
+	AddClient(conn *websocket.Conn)                   // Добавление клиента
+	HandleConnection(conn *websocket.Conn, perm uint) // Обработка соединения
+	BroadcastMessage()                                // Рассылка сообщений всем клиентам
+}
+type Admin interface {
+	IsAdmin(string) (bool, error)
 }
 
 // Service объединяет все зависимости приложения
@@ -34,6 +37,7 @@ type Service struct {
 	Pixel
 	User
 	Websocket
+	Admin
 }
 
 func NewService(repo *repository.Repository) *Service {
@@ -41,5 +45,6 @@ func NewService(repo *repository.Repository) *Service {
 		User:      NewUserService(repo.User),
 		Pixel:     NewPixelService(repo.Pixel),
 		Websocket: NewWebSocketService(repo.Pixel),
+		Admin:     NewAdminService(repo.User),
 	}
 }
