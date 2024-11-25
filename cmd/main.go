@@ -1,24 +1,30 @@
 package main
 
 import (
-	"errors"
+	"fmt"
 	dewu "github.com/Xapsiel/PBCFU"
 	"github.com/Xapsiel/PBCFU/internal/handler"
 	"github.com/Xapsiel/PBCFU/internal/repository"
 	"github.com/Xapsiel/PBCFU/internal/service"
+	"github.com/Xapsiel/PBCFU/internal/service/log"
 	"github.com/joho/godotenv"
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"os"
 )
 
 func main() {
-	logrus.SetFormatter(&logrus.JSONFormatter{})
+	output, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY, 0666)
+	log.Logger = log.NewLogService(output)
+	if err != nil {
+		fmt.Errorf("Ошибка логирования")
+		return
+	}
 	if err := initConfig(); err != nil {
-		logrus.Fatalln(err)
+		log.Logger.Warn(-1, err.Error())
 	}
 	if err := godotenv.Load(); err != nil {
-		logrus.Fatalln(errors.New("Error loading .env file"))
+
+		log.Logger.Warn(-1, "Error loading .env file")
 	}
 	db, err := repository.NewPostgresDB(repository.Config{
 		Host:     viper.GetString("db.host"),
@@ -29,15 +35,15 @@ func main() {
 		SSLMode:  viper.GetString("db.sslmode"),
 	})
 	if err != nil {
-		logrus.Fatalln(err)
+		log.Logger.Warn(-1, err.Error())
 	}
 	repos := repository.NewRepository(db)
-	services := service.NewService(repos)
+	services := service.NewService(repos, output)
 	handlers := handler.NewHandler(services)
 
 	srv := new(dewu.Server)
 	if err := srv.Run(viper.GetString("port"), handlers.InitRoutes()); err != nil {
-		logrus.Fatal(err)
+		log.Logger.Warn(-1, err.Error())
 	}
 
 }

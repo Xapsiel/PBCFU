@@ -33,24 +33,33 @@ func NewWebSocketService(repo repository.Pixel) *WebSocketService {
 func (ws *WebSocketService) HandleConnection(conn *websocket.Conn, perm uint) {
 	ws.AddClient(conn) // Добавляем клиента
 	for {
-		var pixel dewu.PixelClick
-
+		var pixels []dewu.PixelClick
 		// Чтение данных пикселя от клиента
-		err := conn.ReadJSON(&pixel)
+		err := conn.ReadJSON(&pixels)
 
 		if err != nil {
 			log.Printf("Ошибка чтения JSON: %v", err)
-			ws.RemoveClient(conn) // Удаляем клиента в случае ошибки
 			break
 		}
+		for _, pixel := range pixels {
+			err = ws.pixelService.UpdatePixel(dewu.Pixel{ID: pixel.ID, X: pixel.X, Y: pixel.Y, Color: pixel.Color})
+			if err != nil {
+				log.Printf(err.Error())
+				return
+			}
+			if perm == 1 {
+				pixel.Lastclick = 0
+			}
+			err = ws.pixelService.UpdateClick(pixel.ID, pixel.Lastclick)
+			if err != nil {
+				log.Printf(err.Error())
+				return
+			}
+			ws.broadcast <- pixel
 
-		ws.pixelService.UpdatePixel(dewu.Pixel{ID: pixel.ID, X: pixel.X, Y: pixel.Y, Color: pixel.Color})
-		if perm == 1 {
-			pixel.Lastclick = 0
 		}
-		ws.pixelService.UpdateClick(pixel.ID, pixel.Lastclick)
+
 		// Добавляем пиксель в канал вещания
-		ws.broadcast <- pixel
 	}
 }
 

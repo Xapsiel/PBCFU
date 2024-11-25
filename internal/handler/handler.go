@@ -29,11 +29,6 @@ func (h *Handler) InitRoutes() *gin.Engine {
 	{
 		pixels.GET("/getPixels", h.getPixels)
 	}
-	admin := router.Group("admin", h.userIdentity, h.isAdmin)
-	{
-		admin.POST("/print", h.print)
-		admin.POST("/fill", h.fill)
-	}
 
 	webhook := router.Group("/webhook")
 	{

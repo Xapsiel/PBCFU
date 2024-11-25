@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	dewu "github.com/Xapsiel/PBCFU"
+	"github.com/Xapsiel/PBCFU/internal/service/log"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -19,8 +20,9 @@ func (p *PixelPostgres) GetPixels() ([]dewu.Pixel, error) {
 	query := "SELECT x, y, id, color FROM pixels"
 	err := p.db.Select(&pixels, query)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Ошибка получения пикселей")
 	}
+	log.Logger.Print(-1, "Получение данных всех пикселей")
 	return pixels, nil
 }
 func (p *PixelPostgres) UpdatePixel(pixel dewu.Pixel) error {
@@ -29,8 +31,9 @@ func (p *PixelPostgres) UpdatePixel(pixel dewu.Pixel) error {
 		pixel.X, pixel.Y, pixel.ID, pixel.Color, pixel.ID, pixel.Color)
 	_, err := p.db.Exec(query)
 	if err != nil {
-		return err
+		return fmt.Errorf("Ошибка обновления данных о пикселе")
 	}
+	log.Logger.Print(pixel.ID, fmt.Sprintf("Обновление данных пикселя [%d;%d] на следующий цвет [%s]", pixel.X, pixel.Y, pixel.Color))
 	return nil
 }
 func (p *PixelPostgres) GetLastClick(userID int) (int, error) {
@@ -41,14 +44,19 @@ func (p *PixelPostgres) GetLastClick(userID int) (int, error) {
 	err := row.Scan(&lastClick)         // Сканируем результат в переменную lastClick
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, nil // Если пользователь не найден, возвращаем 0
+			return 0, fmt.Errorf("Пользователь не найден") // Если пользователь не найден, возвращаем 0
 		}
-		return 0, err // Возвращаем ошибку, если произошла другая ошибка
+		return 0, fmt.Errorf("Произошла ошибка получения данных о последних кликах") // Возвращаем ошибку, если произошла другая ошибка
 	}
+	log.Logger.Print(userID, "Получение таймкода последнего действия")
 	return lastClick, nil // Возвращаем последний клик
 }
 func (p *PixelPostgres) UpdateClick(userID int, clickValue int) error {
 	query := "UPDATE users SET lastclick = $1 WHERE id = $2"
 	_, err := p.db.Exec(query, clickValue, userID) // Выполняем запрос на обновление
-	return err                                     // Возвращаем ошибку, если произошла ошибка
+	if err != nil {
+		return fmt.Errorf("Ошибка обновления данных об изменении пикселя")
+	}
+	log.Logger.Print(userID, "Обновление таймкода последнего действия")
+	return nil // Возвращаем ошибку, если произошла ошибка
 }

@@ -3,7 +3,9 @@ package service
 import (
 	dewu "github.com/Xapsiel/PBCFU"
 	"github.com/Xapsiel/PBCFU/internal/repository"
+	"github.com/Xapsiel/PBCFU/internal/service/log"
 	"github.com/gorilla/websocket"
+	"io"
 )
 
 // Pixel - интерфейс для работы с пикселями
@@ -31,6 +33,11 @@ type Websocket interface {
 type Admin interface {
 	IsAdmin(string) (bool, error)
 }
+type Log interface {
+	SetFormat(io.Writer)
+	Print(int, string)
+	Warn(int, string)
+}
 
 // Service объединяет все зависимости приложения
 type Service struct {
@@ -38,13 +45,15 @@ type Service struct {
 	User
 	Websocket
 	Admin
+	Log
 }
 
-func NewService(repo *repository.Repository) *Service {
+func NewService(repo *repository.Repository, w io.Writer) *Service {
 	return &Service{
 		User:      NewUserService(repo.User),
 		Pixel:     NewPixelService(repo.Pixel),
 		Websocket: NewWebSocketService(repo.Pixel),
 		Admin:     NewAdminService(repo.User),
+		Log:       log.NewLogService(w),
 	}
 }

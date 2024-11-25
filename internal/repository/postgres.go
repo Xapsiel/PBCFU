@@ -2,12 +2,12 @@ package repository
 
 import (
 	"fmt"
+	"github.com/Xapsiel/PBCFU/internal/service/log"
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file" // Добавлено для поддержки файлового источника
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -67,7 +67,7 @@ func NewPostgresDB(cfg Config) (*sqlx.DB, error) {
 		return nil, fmt.Errorf("failed to apply migrations: %w", err)
 	}
 
-	logrus.Println("Migrations applied successfully!")
+	log.Logger.Print(-1, "Migrations applied successfully!")
 	return db, nil
 }
 
@@ -75,7 +75,7 @@ func createDB(db *sqlx.DB, dbName string) error {
 	// Проверяем наличие базы данных
 	var exists bool
 	query := fmt.Sprintf("SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname='%s')", dbName)
-	logrus.Println(query)
+
 	if err := db.Get(&exists, query); err != nil {
 		return fmt.Errorf("failed to check if database exists: %w", err)
 	}
@@ -86,7 +86,7 @@ func createDB(db *sqlx.DB, dbName string) error {
 		if err != nil {
 			return fmt.Errorf("failed to create database: %w", err)
 		}
-		logrus.Printf("Database '%s' created successfully!", dbName)
+		log.Logger.Print(-1, fmt.Sprintf("Database '%s' created successfully!", dbName))
 	}
 
 	return nil

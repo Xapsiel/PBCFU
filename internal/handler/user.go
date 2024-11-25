@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	dewu "github.com/Xapsiel/PBCFU"
 	"github.com/gin-gonic/gin"
 	"net/http"
@@ -9,7 +10,7 @@ import (
 func (h *Handler) signUp(c *gin.Context) {
 	var input dewu.User
 	if err := c.BindJSON(&input); err != nil {
-		newErrorResponse(c, http.StatusBadRequest, err.Error())
+		newErrorResponse(c, http.StatusBadRequest, fmt.Errorf("Ошибка получения данных").Error())
 		return
 	}
 	id, err := h.service.CreateUser(input)
@@ -27,7 +28,7 @@ type signInInput struct {
 func (h *Handler) signIn(c *gin.Context) {
 	var input signInInput
 	if err := c.BindJSON(&input); err != nil {
-		newErrorResponse(c, http.StatusBadRequest, err.Error())
+		newErrorResponse(c, http.StatusBadRequest, fmt.Errorf("Ошибка получения данных").Error())
 		return
 	}
 	token, id, err := h.service.GenerateToken(input.Login, input.Password)
@@ -60,7 +61,11 @@ func (h *Handler) validateToken(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"isValid": false})
 		return
 	}
+	if len(token) <= 7 {
+		c.JSON(http.StatusUnauthorized, gin.H{"isValid": false})
+		return
 
+	}
 	// Убираем "Bearer " из токена
 	token = token[len("Bearer "):]
 	id, login, _, err := h.service.ParseToken(token)

@@ -1,8 +1,8 @@
 package handler
 
 import (
+	"github.com/Xapsiel/PBCFU/internal/service/log"
 	"github.com/gin-gonic/gin"
-	"github.com/sirupsen/logrus"
 )
 
 type error struct {
@@ -10,6 +10,6 @@ type error struct {
 }
 
 func newErrorResponse(c *gin.Context, statusCode int, message string) {
-	logrus.Error(message)
+	log.Logger.Warn(-1, message)
 	c.AbortWithStatusJSON(statusCode, error{message})
 }
